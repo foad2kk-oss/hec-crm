@@ -56,13 +56,30 @@ export const assistantPrompts = {
 
   extractDecisionMakers: (text: string) => ({
     system:
-      "You extract likely decision-makers (name, title, relevance) from pasted LinkedIn/company text. Respond with strict JSON: { decision_makers: [{name, title, relevance}] }.",
+      "You extract likely decision-makers (name, title, relevance) from pasted LinkedIn/company text. Respond with strict JSON: { decision_makers: [{name, title, relevance}] }. relevance must be 1 short sentence in Arabic. If the text has no real names/titles, return an empty array — never invent people.",
     prompt: `Extract decision makers from this text:\n\n${text}`,
   }),
 
   suggestEngineer: (c: Partial<Client>, engineers: { id: string; full_name: string; department: string | null }[]) => ({
     system:
-      "You recommend which engineer should attend a client meeting based on industry fit and department. Respond with strict JSON: { engineer_id, reason }.",
-    prompt: `Client:\n${clientContext(c)}\n\nAvailable engineers:\n${JSON.stringify(engineers, null, 2)}\n\nWhich engineer is the best fit to attend a meeting with this client?`,
+      "You recommend which engineer should attend a client meeting based on industry fit and department. " +
+      "You MUST pick engineer_id from the exact list of ids provided — never invent an id. " +
+      'Respond with strict JSON: { engineer_id, reason }. reason must be 1-2 sentences in Arabic explaining why.',
+    prompt: `Client:\n${clientContext(c)}\n\nAvailable engineers (pick engineer_id only from this list):\n${JSON.stringify(engineers, null, 2)}\n\nWhich engineer is the best fit to attend a meeting with this client?`,
+  }),
+
+  draftOutreachToPerson: (
+    c: Partial<Client>,
+    person: { name: string; title: string },
+    lang: "ar" | "en"
+  ) => ({
+    system:
+      lang === "ar"
+        ? "أنت مساعد أعمال تكتب رسائل تواصل أولى مباشرة وشخصية لصناع القرار، بالعربية الفصحى، بأسلوب احترافي ومختصر."
+        : "You write short, professional, personalized first-outreach emails to decision-makers for an engineering consulting firm.",
+    prompt:
+      lang === "ar"
+        ? `اكتب رسالة تواصل أولى مباشرة إلى "${person.name}" (${person.title}) بخصوص خدمات الاستشارات الهندسية لمشروعهم، تتضمن مقدمة موجزة عن مكتبنا وطلب اجتماع قصير. خاطبه بالاسم مباشرة.\n\nمعلومات الشركة/المشروع:\n${clientContext(c)}`
+        : `Write a short, personalized first-outreach email to "${person.name}" (${person.title}) about our engineering consulting services for their project, with a brief intro and a request for a short meeting. Address them by name directly.\n\nCompany/project info:\n${clientContext(c)}`,
   }),
 };
