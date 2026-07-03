@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { completeJson, AiNotConfiguredError } from "@/lib/ai/clients";
+import { completeJson, AiNotConfiguredError, AiQuotaExceededError } from "@/lib/ai/clients";
 import type { Client } from "@/types/database";
 
 export async function POST(request: Request) {
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     });
     return NextResponse.json(result);
   } catch (err) {
-    if (err instanceof AiNotConfiguredError) {
+    if (err instanceof AiNotConfiguredError || err instanceof AiQuotaExceededError) {
       // graceful fallback: return raw candidates without AI ranking/reasons
       return NextResponse.json({
         similar: candidates.slice(0, 5).map((cand) => ({ id: cand.id, company_name: cand.company_name, reason: "" })),

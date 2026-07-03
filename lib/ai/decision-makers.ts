@@ -1,4 +1,4 @@
-import { getOpenAI, OPENAI_MODEL, AiNotConfiguredError } from "./clients";
+import { getOpenAI, OPENAI_MODEL, AiNotConfiguredError, rethrowIfQuotaError } from "./clients";
 import type { Client } from "@/types/database";
 
 export interface DecisionMaker {
@@ -29,23 +29,28 @@ export async function searchDecisionMakersOnline(client: Partial<Client>): Promi
     responses: { create: (params: Record<string, unknown>) => Promise<{ output_text?: string }> };
   };
 
-  const response = await clientApi.responses.create({
-    model: OPENAI_MODEL,
-    tools: [{ type: "web_search" }],
-    input: [
-      { role: "system", content: SYSTEM_PROMPT },
-      {
-        role: "user",
-        content: `Company: ${client.company_name}
+  let response: { output_text?: string };
+  try {
+    response = await clientApi.responses.create({
+      model: OPENAI_MODEL,
+      tools: [{ type: "web_search" }],
+      input: [
+        { role: "system", content: SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: `Company: ${client.company_name}
 Industry: ${client.industry ?? "-"}
 Website: ${client.website ?? "-"}
 City: ${client.city ?? "-"}
 
 Search LinkedIn and the web for this company's likely decision-makers regarding engineering/construction
 consulting needs. Return the JSON described in the system prompt.`,
-      },
-    ],
-  });
+        },
+      ],
+    });
+  } catch (err) {
+    rethrowIfQuotaError(err);
+  }
 
   const text: string = response.output_text ?? "";
   const jsonMatch = text.match(/\{[\s\S]*\}/);

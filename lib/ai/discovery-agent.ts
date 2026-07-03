@@ -1,4 +1,4 @@
-import { getOpenAI, OPENAI_MODEL, AiNotConfiguredError } from "./clients";
+import { getOpenAI, OPENAI_MODEL, AiNotConfiguredError, AiQuotaExceededError, rethrowIfQuotaError } from "./clients";
 
 export interface DiscoveredLeadCandidate {
   company: string;
@@ -89,17 +89,22 @@ export async function runDiscoveryQuery(query: string): Promise<DiscoveredLeadCa
   const client = openai as unknown as {
     responses: { create: (params: Record<string, unknown>) => Promise<{ output_text?: string }> };
   };
-  const response = await client.responses.create({
-    model: OPENAI_MODEL,
-    tools: [{ type: "web_search" }],
-    input: [
-      { role: "system", content: SYSTEM_PROMPT },
-      {
-        role: "user",
-        content: `Search for: "${query}". Extract any newly discovered leads (industrial investment opportunities OR government tenders/RFPs requesting engineering supervision/PM consulting, within the last 30 days ideally) as JSON matching the DiscoveredLeadCandidate schema: { company, project, location, source_link, estimated_project_size, industry, investment_value (number or null), confidence_score (0-100), ai_summary (2-3 sentences in Arabic), suggested_action (1 sentence in Arabic) }.`,
-      },
-    ],
-  });
+  let response: { output_text?: string };
+  try {
+    response = await client.responses.create({
+      model: OPENAI_MODEL,
+      tools: [{ type: "web_search" }],
+      input: [
+        { role: "system", content: SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: `Search for: "${query}". Extract any newly discovered leads (industrial investment opportunities OR government tenders/RFPs requesting engineering supervision/PM consulting, within the last 30 days ideally) as JSON matching the DiscoveredLeadCandidate schema: { company, project, location, source_link, estimated_project_size, industry, investment_value (number or null), confidence_score (0-100), ai_summary (2-3 sentences in Arabic), suggested_action (1 sentence in Arabic) }.`,
+        },
+      ],
+    });
+  } catch (err) {
+    rethrowIfQuotaError(err);
+  }
 
   const text: string = response.output_text ?? "";
   const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -118,7 +123,10 @@ export async function runFullDiscoverySweep(): Promise<{ query: string; leads: D
     try {
       const leads = await runDiscoveryQuery(query);
       results.push({ query, leads });
-    } catch {
+    } catch (err) {
+      // Stop the whole sweep immediately on quota/billing errors instead of silently
+      // burning through the remaining queries and reporting a misleading "0 leads found".
+      if (err instanceof AiQuotaExceededError) throw err;
       results.push({ query, leads: [] });
     }
   }

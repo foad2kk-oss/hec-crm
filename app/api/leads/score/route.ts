@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { scoreClient } from "@/lib/ai/scoring";
-import { AiNotConfiguredError } from "@/lib/ai/clients";
+import { AiNotConfiguredError, AiQuotaExceededError } from "@/lib/ai/clients";
 
 export async function POST(request: Request) {
   const { clientId } = await request.json();
@@ -59,6 +59,9 @@ export async function POST(request: Request) {
   } catch (err) {
     if (err instanceof AiNotConfiguredError) {
       return NextResponse.json({ error: err.message }, { status: 501 });
+    }
+    if (err instanceof AiQuotaExceededError) {
+      return NextResponse.json({ error: err.message }, { status: 429 });
     }
     console.error(err);
     return NextResponse.json({ error: "Scoring failed" }, { status: 500 });

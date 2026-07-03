@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { runFullDiscoverySweep } from "@/lib/ai/discovery-agent";
-import { AiNotConfiguredError } from "@/lib/ai/clients";
+import { AiNotConfiguredError, AiQuotaExceededError } from "@/lib/ai/clients";
 
 function normalizeName(name: string) {
   return name
@@ -76,6 +76,9 @@ export async function POST(request: Request) {
   } catch (err) {
     if (err instanceof AiNotConfiguredError) {
       return NextResponse.json({ error: err.message }, { status: 501 });
+    }
+    if (err instanceof AiQuotaExceededError) {
+      return NextResponse.json({ error: err.message }, { status: 429 });
     }
     console.error(err);
     return NextResponse.json({ error: "Discovery sweep failed" }, { status: 500 });

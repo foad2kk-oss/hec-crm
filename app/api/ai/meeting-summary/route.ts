@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { completeText, AiNotConfiguredError } from "@/lib/ai/clients";
+import { completeText, AiNotConfiguredError, AiQuotaExceededError } from "@/lib/ai/clients";
 import { assistantPrompts } from "@/lib/ai/prompts";
 import type { Meeting } from "@/types/database";
 
@@ -22,6 +22,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ text });
   } catch (err) {
     if (err instanceof AiNotConfiguredError) return NextResponse.json({ error: err.message }, { status: 501 });
+    if (err instanceof AiQuotaExceededError) return NextResponse.json({ error: err.message }, { status: 429 });
     console.error(err);
     return NextResponse.json({ error: "AI request failed" }, { status: 500 });
   }
