@@ -1,0 +1,27 @@
+name: Keep Supabase project active
+
+# Supabase auto-pauses free-tier projects after 7 days without real API
+# traffic. This workflow sends a lightweight authenticated read every few
+# days so the project (hec-crm) stays active.
+#
+# Setup required (one-time, in this repo's GitHub Settings > Secrets and
+# variables > Actions):
+#   SUPABASE_ANON_KEY  — the project's anon public key
+#                         (Supabase Dashboard > Project Settings > API)
+
+on:
+  schedule:
+    - cron: '43 6 */3 * *' # every 3 days at 06:43 UTC
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST API
+        run: |
+          curl -sf --max-time 20 \
+            "https://qoostvopdlcwizkwxeup.supabase.co/rest/v1/profiles?select=id&limit=1" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -o /dev/null -w "status: %{http_code}\n"
