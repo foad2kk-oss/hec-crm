@@ -1,16 +1,21 @@
 name: Keep Supabase project active
 
-# Supabase auto-pauses free-tier projects after 7 days without "real" API
-# activity. A plain authenticated SELECT wasn't reliably counted, so this
-# workflow does a real write (INSERT then DELETE) against a dedicated,
-# isolated table every few days so the project (hec-crm) stays active.
+# Supabase auto-pauses free-tier projects after 7 days without real API
+# traffic. This workflow sends a lightweight authenticated read every few
+# days so the project (hec-crm) stays active.
 #
 # Setup required (one-time, in this repo's GitHub Settings > Secrets and
 # variables > Actions):
 #   SUPABASE_ANON_KEY  — the project's anon public key
 #                         (Supabase Dashboard > Project Settings > API)
-#   Also run the `keepalive_ping` migration at the bottom of
-#   supabase/schema.sql once in the Supabase SQL editor.
+#
+# Note: an earlier attempt switched this to a write (INSERT+DELETE) against a
+# new `keepalive_ping` table, since a plain read wasn't reliably counted by
+# Supabase's inactivity check. That table was never created (the SQL editor
+# migration didn't go through), so this reverts to the original, proven-working
+# read-based ping. The `keepalive_ping` migration at the bottom of
+# supabase/schema.sql is left in place — apply it later and swap this back to
+# a write if reads keep triggering pause warnings.
 
 on:
   schedule:
@@ -21,26 +26,10 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Write + delete a heartbeat row in Supabase
+      - name: Ping Supabase REST API
         run: |
-          set -e
-          BASE="https://qoostvopdlcwizkwxeup.supabase.co/rest/v1/keepalive_ping"
-          AUTH_HEADERS=(-H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}")
-
-          echo "Inserting heartbeat row..."
-          ID=$(curl -sf --max-time 20 -X POST "$BASE" \
-            "${AUTH_HEADERS[@]}" \
-            -H "Content-Type: application/json" \
-            -H "Prefer: return=representation" \
-            -d '{}' | jq -r '.[0].id')
-
-          if [ -z "$ID" ] || [ "$ID" = "null" ]; then
-            echo "Insert failed to return an id — treating as failure."
-            exit 1
-          fi
-          echo "Inserted row: $ID"
-
-          echo "Deleting heartbeat row..."
-          curl -sf --max-time 20 -X DELETE "$BASE?id=eq.$ID" \
-            "${AUTH_HEADERS[@]}" \
-            -o /dev/null -w "delete status: %{http_code}\n"
+          curl -sf --max-time 20 \
+            "https://qoostvopdlcwizkwxeup.supabase.co/rest/v1/profiles?select=id&limit=1" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -o /dev/null -w "status: %{http_code}\n"
