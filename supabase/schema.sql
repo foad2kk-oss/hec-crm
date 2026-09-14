@@ -465,3 +465,23 @@ grant select on v_pipeline_funnel, v_leads_by_source, v_leads_by_city, v_leads_b
 --      ) $$
 -- );
 -- ============================================================================
+
+-- ============================================================================
+-- KEEPALIVE_PING  (migration: 2026-09-14)
+-- Dedicated, isolated table for the GitHub Actions "Keep Supabase project
+-- active" workflow (.github/workflows/keep-alive.yml). A plain authenticated
+-- SELECT wasn't reliably counted by Supabase's free-tier inactivity check, so
+-- the workflow now does a real anon-key INSERT + DELETE against this table
+-- instead of reading from `profiles`. Isolated on purpose so the anon key
+-- never needs write access to any real business table.
+-- ============================================================================
+create table if not exists keepalive_ping (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now()
+);
+
+alter table keepalive_ping enable row level security;
+
+create policy "keepalive_ping_anon_insert" on keepalive_ping for insert to anon with check (true);
+create policy "keepalive_ping_anon_delete" on keepalive_ping for delete to anon using (true);
+create policy "keepalive_ping_anon_select" on keepalive_ping for select to anon using (true);
